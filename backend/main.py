@@ -509,10 +509,10 @@ async def simulate_concurrency(req: ConcurrencySimulationRequest):
             if not unit:
                 raise HTTPException(status_code=404, detail="Unit not found")
             
-            # Reset unit for demo if it wasn't Available
-            if unit["condition_status"] != "Available":
-                cur.execute("UPDATE tool_units SET condition_status = 'Available' WHERE unit_id = %s;", (req.unit_id,))
-                conn.commit()
+            # Reset unit and clear active reservations for clean demo measurement
+            cur.execute("DELETE FROM reservations WHERE unit_id = %s;", (req.unit_id,))
+            cur.execute("UPDATE tool_units SET condition_status = 'Available' WHERE unit_id = %s;", (req.unit_id,))
+            conn.commit()
     finally:
         conn.close()
 
