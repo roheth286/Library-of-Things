@@ -3,7 +3,6 @@
 
 ### Team Members
 - **PRASANTH S** - 24BCE2023
-- **ARNADEEP SAHA** - 24BCE0760
 - **ROHETH** - 24BCT0277
 
 ---
