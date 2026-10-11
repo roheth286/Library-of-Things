@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query, Body, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ from backend.database import get_db_connection, execute_query
 from backend.concurrency_demo import simulate_unprotected_reservation, simulate_protected_reservation
 
 app = FastAPI(
-    title="Library of Things - Database Systems Lab",
+    title="CircuLend: Library of Things - Database Systems Lab",
     version="1.0.0",
     description="BCSE302P DBMS Lab Project - PostgreSQL, FastAPI, Triggers, Procedures, Concurrency Demo"
 )
@@ -26,6 +26,12 @@ app.add_middleware(
 )
 
 thread_pool = ThreadPoolExecutor(max_workers=10)
+
+def verify_staff_role(x_user_role: Optional[str] = Header(None)):
+    """FR-11 & T12: Role-based access control distinguishing member actions from staff."""
+    if x_user_role and x_user_role.lower() not in ("staff", "admin"):
+        raise HTTPException(status_code=403, detail="Forbidden: Action requires staff or administrator privileges")
+
 
 # ------------------------------------------------------------------------------
 # Pydantic Request Models
@@ -115,15 +121,17 @@ def get_members():
 # 2. CORE LENDING FLOW (CHECK-OUT & CHECK-IN)
 # ------------------------------------------------------------------------------
 @app.post("/api/loans/checkout")
-def checkout_tool(req: CheckOutRequest):
+def checkout_tool(req: CheckOutRequest, x_user_role: Optional[str] = Header(None)):
     """
-    Staff Check-out:
+    Staff Check-out (FR-03, FR-11, T04, T11, T12):
     - Atomically verifies unit availability with SELECT ... FOR UPDATE
+    - Role-based authorization: Rejects if caller is identified as 'member'
     - Creates a new active loan row
     - Updates unit condition_status to 'Loaned'
     - Creates corresponding deposit record
     - Triggers maintain_member_loans trigger to update active_loans_count
     """
+    verify_staff_role(x_user_role)
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -194,9 +202,9 @@ def checkout_tool(req: CheckOutRequest):
         conn.close()
 
 @app.post("/api/loans/checkin")
-def checkin_tool(req: CheckInRequest):
+def checkin_tool(req: CheckInRequest, x_user_role: Optional[str] = Header(None)):
     """
-    Staff Check-in / Return:
+    Staff Check-in / Return (FR-04, FR-05, FR-07, T05, T09):
     Executes PostgreSQL Stored Procedure `sp_return_unit_and_cascade`:
     - Closes loan with return_date
     - If damaged (Moderate/Severe), inserts damage_reports which fires trigger to flag unit to Repair
@@ -204,6 +212,7 @@ def checkin_tool(req: CheckInRequest):
     - Otherwise sets unit to 'Available'
     - Automatically updates deposits table (Released or Forfeited)
     """
+    verify_staff_role(x_user_role)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -228,6 +237,41 @@ def checkin_tool(req: CheckInRequest):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        conn.close()
+
+@app.post("/api/deposits/release")
+def release_deposit(req: DepositReleaseRequest, x_user_role: Optional[str] = Header(None)):
+    """
+    Rule-based deposit release (FR-07, T07):
+    Release is allowed only after the return-condition check passes and loan is closed.
+    """
+    verify_staff_role(x_user_role)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CALL sp_release_deposit(%s, FALSE, '');
+            """, (req.loan_id,))
+            row = cur.fetchone()
+            conn.commit()
+
+            success = row[0] if row else False
+            message = row[1] if row and len(row) > 1 else "Processed"
+
+            if not success:
+                raise HTTPException(status_code=400, detail=message)
+
+            return {
+                "success": True,
+                "message": message
+            }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
 

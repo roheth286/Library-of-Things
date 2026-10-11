@@ -334,7 +334,10 @@ async function handleCheckout(e) {
 
   const res = await fetchJSON("/api/loans/checkout", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "X-User-Role": "staff"
+    },
     body: JSON.stringify({ unit_id: parseInt(unitId), member_id: parseInt(memberId), loan_days: parseInt(days) })
   });
 
@@ -357,7 +360,10 @@ async function handleCheckin(e) {
 
   const res = await fetchJSON("/api/loans/checkin", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "X-User-Role": "staff"
+    },
     body: JSON.stringify({ loan_id: parseInt(loanId), condition, notes })
   });
 

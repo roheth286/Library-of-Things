@@ -2,7 +2,6 @@
 -- DATABASE SCHEMA: LIBRARY OF THINGS (BCSE302P)
 -- TEAM:
 --   PRASANTH S - 24BCE2023
---   ARNADEEP SAHA - 24BCE0760
 --   ROHETH - 24BCT0277
 -- ==============================================================================
 
