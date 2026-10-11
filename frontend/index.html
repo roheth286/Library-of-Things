@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library of Things | DBMS Lab Project (BCSE302P)</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <!-- HEADER -->
+  <header>
+    <div class="header-top">
+      <div class="logo-area">
+        <h1><i class="fa-solid fa-toolbox text-blue-500"></i> Library of Things</h1>
+        <p>Database-Driven Lending & Reservation System (BCSE302P)</p>
+      </div>
+      <div class="team-badge">
+        <strong>Team:</strong> Prasanth S (24BCE2023) | Arnadeep Saha (24BCE0760) | Roheth (24BCT0277)
+      </div>
+    </div>
+    <nav>
+      <button class="nav-tab active" onclick="switchTab('catalog')"><i class="fa-solid fa-list-check"></i> Tool Catalog</button>
+      <button class="nav-tab" onclick="switchTab('staff')"><i class="fa-solid fa-clipboard-user"></i> Staff Circulation</button>
+      <button class="nav-tab" onclick="switchTab('kits')"><i class="fa-solid fa-boxes-stacked"></i> Kit Availability</button>
+      <button class="nav-tab" onclick="switchTab('analytics')"><i class="fa-solid fa-chart-pie"></i> Fleet Analytics</button>
+      <button class="nav-tab" onclick="switchTab('concurrency')"><i class="fa-solid fa-bolt-lightning"></i> Concurrency Demo (Expo)</button>
+    </nav>
+  </header>
+
+  <!-- MAIN BODY -->
+  <main>
+    <!-- 1. CATALOG TAB -->
+    <section id="tab-catalog" class="view-section active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="title">Total Tools</div>
+          <div class="value" id="stat-total-tools">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="title">Available Units</div>
+          <div class="value" id="stat-available-units" style="color: var(--success);">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="title">Currently Loaned</div>
+          <div class="value" id="stat-loaned-units" style="color: var(--warning);">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="title">Units In Repair</div>
+          <div class="value" id="stat-repair-units" style="color: var(--danger);">0</div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <h2><i class="fa-solid fa-wrench"></i> Tool Inventory</h2>
+        <div style="display: flex; gap: 0.5rem;">
+          <select id="category-filter" class="form-control" style="width: 250px;" onchange="loadTools()">
+            <option value="">All Categories</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadTools()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+
+      <div id="tools-container" class="tools-grid">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+    <!-- 2. STAFF CIRCULATION TAB -->
+    <section id="tab-staff" class="view-section">
+      <h2 style="margin-bottom: 1rem;"><i class="fa-solid fa-clipboard-check"></i> Staff Desk: Check-out & Returns</h2>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+        <!-- Check-out Form -->
+        <div class="stat-card">
+          <h3 style="margin-bottom: 1rem; color: var(--primary);"><i class="fa-solid fa-arrow-right-from-bracket"></i> New Loan (Check-out)</h3>
+          <form id="checkout-form" onsubmit="handleCheckout(event)">
+            <div class="form-group">
+              <label>Select Member:</label>
+              <select id="checkout-member-select" class="form-control" required></select>
+            </div>
+            <div class="form-group">
+              <label>Select Available Physical Unit:</label>
+              <select id="checkout-unit-select" class="form-control" required></select>
+            </div>
+            <div class="form-group">
+              <label>Loan Duration (Days):</label>
+              <input type="number" id="checkout-days" class="form-control" value="7" min="1" max="30" required>
+            </div>
+            <button type="submit" class="btn" style="width: 100%;"><i class="fa-solid fa-check"></i> Complete Check-out</button>
+          </form>
+        </div>
+
+        <!-- Quick Return Card -->
+        <div class="stat-card">
+          <h3 style="margin-bottom: 1rem; color: var(--success);"><i class="fa-solid fa-arrow-right-to-bracket"></i> Process Return (Triggers Stored Proc)</h3>
+          <form id="checkin-form" onsubmit="handleCheckin(event)">
+            <div class="form-group">
+              <label>Select Active Loan:</label>
+              <select id="checkin-loan-select" class="form-control" required></select>
+            </div>
+            <div class="form-group">
+              <label>Return Condition Assessment:</label>
+              <select id="checkin-condition" class="form-control" required>
+                <option value="Good">Good / Working (Full Deposit Released)</option>
+                <option value="Minor">Minor Wear (Full Deposit Released)</option>
+                <option value="Moderate">Moderate Damage (Auto-Flagged to Repair via Trigger)</option>
+                <option value="Severe">Severe Damage (Auto-Flagged to Repair, Deposit Forfeited)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Inspection Notes:</label>
+              <input type="text" id="checkin-notes" class="form-control" placeholder="e.g., Blade slightly dull, returned clean">
+            </div>
+            <button type="submit" class="btn" style="width: 100%; background: var(--success);"><i class="fa-solid fa-box-archive"></i> Process Return & Cascade</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Active Loans Table -->
+      <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-clock-rotate-left"></i> Currently Active Loans</h3>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Loan ID</th>
+              <th>Tool & Serial No.</th>
+              <th>Borrower Member</th>
+              <th>Loan Date</th>
+              <th>Due Date</th>
+              <th>Deposit Held</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="active-loans-tbody">
+            <!-- Injected via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. KITS TAB (VIEW DEMO) -->
+    <section id="tab-kits" class="view-section">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+          <h2><i class="fa-solid fa-boxes-stacked"></i> Kit Availability (Database View)</h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Calculated live using SQL View <code>v_kit_availability</code>. A kit is only marked <strong>Available</strong> if every required component tool has at least one unit free.
+          </p>
+        </div>
+        <button class="btn btn-secondary" onclick="loadKits()"><i class="fa-solid fa-rotate"></i> Refresh Kits</button>
+      </div>
+
+      <div id="kits-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem;">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+    <!-- 4. ANALYTICS & FLEET STATUS -->
+    <section id="tab-analytics" class="view-section">
+      <h2 style="margin-bottom: 1.5rem;"><i class="fa-solid fa-chart-line"></i> Relational Database Analytics Views</h2>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+        <!-- Fleet Status Table -->
+        <div class="stat-card">
+          <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-table-list"></i> Fleet Status Breakdown (v_fleet_status)</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Total</th>
+                  <th>Available</th>
+                  <th>Loaned</th>
+                  <th>Repair</th>
+                </tr>
+              </thead>
+              <tbody id="fleet-status-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Waitlist Demand Table -->
+        <div class="stat-card">
+          <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-people-line"></i> Waitlist Queue (v_waitlist_summary)</h3>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tool Name</th>
+                  <th>Category</th>
+                  <th>Waiting Queue</th>
+                </tr>
+              </thead>
+              <tbody id="waitlist-summary-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deposit Holds Report -->
+      <div class="stat-card">
+        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-receipt"></i> Recent Deposit Ledger & Status</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Deposit ID</th>
+                <th>Loan ID</th>
+                <th>Tool</th>
+                <th>Member</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="deposits-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. CONCURRENCY EXPO DEMO TAB -->
+    <section id="tab-concurrency" class="view-section">
+      <div class="concurrency-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <div>
+            <h2 style="color: var(--secondary);"><i class="fa-solid fa-bolt-lightning text-warning"></i> Concurrency & Isolation Expo Demonstration</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">
+              Demonstrates Phase 3 of the lab syllabus: Race conditions under concurrent reservations and the fix using <strong>pessimistic row locking (<code>SELECT ... FOR UPDATE</code>)</strong>.
+            </p>
+          </div>
+          <span class="badge" style="background: #e0f2fe; color: #0369a1; padding: 0.5rem 1rem; font-size: 0.9rem;">
+            BCSE302P Phase 3 Expo Ready
+          </span>
+        </div>
+
+        <div class="step-card">
+          <h3>Simulation Setup:</h3>
+          <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #475569;">
+            We will spawn two concurrent background threads simultaneously attempting to reserve the exact same physical unit for two different members (Aarav Sharma and Aditi Patel).
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <div class="form-group">
+              <label>Select Target Physical Unit:</label>
+              <select id="sim-unit-select" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label>Thread 1 (Member):</label>
+              <input type="text" class="form-control" value="Member #1 (Aarav Sharma)" disabled>
+            </div>
+            <div class="form-group">
+              <label>Thread 2 (Member):</label>
+              <input type="text" class="form-control" value="Member #2 (Aditi Patel)" disabled>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <button class="btn btn-danger" onclick="runSimulation('unprotected')" id="btn-sim-unprotected">
+              <i class="fa-solid fa-triangle-exclamation"></i> 1. Run Unprotected (Show Race Condition / Double-Booking)
+            </button>
+            <button class="btn" onclick="runSimulation('protected')" id="btn-sim-protected" style="background: var(--success);">
+              <i class="fa-solid fa-shield-halved"></i> 2. Run Protected (Fix with SELECT ... FOR UPDATE)
+            </button>
+          </div>
+        </div>
+
+        <h3>Execution Log & Database Verification:</h3>
+        <div id="sim-results" class="results-console">Awaiting simulation trigger... Click one of the buttons above to test concurrent database execution.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL FOR UNIT DETAILS & RESERVATION -->
+  <div id="unit-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 id="modal-tool-title">Tool Units</h3>
+        <button onclick="closeModal()" style="border: none; background: none; font-size: 1.25rem; cursor: pointer;">&times;</button>
+      </div>
+      <div id="modal-units-list" style="margin-bottom: 1.5rem; max-height: 250px; overflow-y: auto;"></div>
+      <div id="modal-action-area"></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    Database Systems Lab (BCSE302P) &bull; Library of Things &bull; Designed for PostgreSQL & FastAPI
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
